@@ -43,6 +43,9 @@ module perm_blk (
 	reg [63:0] dout_d, m1wd_d, m2wd_d, m3wd_d, m4wd_d;
 	reg [2:0] m1rx_d, m1ry_d, m1wx_d, m1wy_d, m1wr_d, m2rx_d, m2ry_d, m2wx_d, m2wy_d, m2wr_d, m3rx_d, m3ry_d, m3wx_d, m3wy_d, m3wr_d, m4rx_d, m4ry_d, m4wx_d, m4wy_d, m4wr_d;
 	reg [4:0][63:0] theta_c = 0;
+	reg [5:0] roundc, roundc_d;
+	reg [2:0] rcnum, rcnum_d;
+	reg [8:0] rc = 0;
 
 	enum reg [3:0] {
 		IDLE,
@@ -54,7 +57,10 @@ module perm_blk (
 		BUFFER_2,
 		BUFFER_3,
 		CHI_2,
+		BUFFER_4,
 		IOTA,
+//		BUFFER_5,
+//		BUFFER_6,
 		DATA_OUT
 	} current_state, next_state;
 
@@ -93,6 +99,8 @@ module perm_blk (
 		m4wd_d = m4wd;
 		m4rx_d = m4rx;
 		m4ry_d = m4ry;
+		roundc_d = roundc;
+		rcnum_d = rcnum;
 //		$display("x:%b y:%b DATA:%h STOP:%b 1st:%b DIN:%h", m1wx, m1wy, m1wd, stopin, firstin, din);
 		case (current_state)
 			IDLE: begin
@@ -476,17 +484,20 @@ module perm_blk (
 						m3rx_d = 0;
 						m3ry_d = 0;
 //						$display("%b %b %b", m2wx, m2wy, m2wd);
-						next_state = IOTA;
+						next_state = BUFFER_4;
 					end
 					else begin
 						next_state = CHI_1;
 					end
 				end
 			end
-			IOTA: begin
+			BUFFER_4: begin
 				m1wr_d = 0;
 				m1wx_d = 0;
 				m1wy_d = 0;
+				next_state = IOTA;
+			end
+			IOTA: begin
 //////////////////////////////// CHECK OUTPUT FROM CHI 
 				$display("x%b y%b | %h%t", m1rx, m1ry, m1rd, $time);
 				m1ry_d = m1ry + 1;
@@ -499,8 +510,75 @@ module perm_blk (
 						next_state = DATA_OUT;
 					end
 				end
+			
+
+/*				if (rcnum == 0) begin
+					theta_c[0] = 0;
+				end
+				if (rc[8]) begin
+					rc[0] = ~rc[0];
+					rc[4] = ~rc[4];
+					rc[5] = ~rc[5];
+					rc[6] = ~rc[6];
+				end
+				rc = rc << 1;	
+				if (roundc==0 && rcnum==0) begin
+					rc = 9'b000000010;
+					theta_c[0] = 1;
+				end
+				rcnum_d = rcnum + 1;
+				if (rc[1]) begin
+					case(rcnum)
+						1: theta_c[0] = 1;
+						2: theta_c[0][1] = 1;
+						3: theta_c[0][3] = 1;
+						4: theta_c[0][7] = 1;
+						5: theta_c[0][15] = 1;
+						6: theta_c[0][31] = 1;
+						7: begin
+							theta_c[0][63] = 1;
+							roundc_d = roundc + 1;
+							if (roundc < 25)
+								next_state = THETA_C;
+							else
+								next_state = DATA_OUT;
+							m1wr_d = 1;
+							m1wd_d = m2rd ^ theta_c[0];
+							m1wx_d = 0;
+							m1wy_d = 0;
+							m1rx_d = 0;
+							m1ry_d = 0;
+							rcnum = 0;
+							theta_c = 0;
+						end
+						default: begin
+							$display("CASE ERROR 4 | %b", rcnum);
+						end
+					endcase
+				end
+				else if (rcnum == 7) begin
+					roundc_d = roundc + 1;
+					if (roundc < 25)
+						next_state = THETA_C;
+					else
+						next_state = DATA_OUT;
+					m1wr_d = 1;
+					m1wd_d = m2rd ^ theta_c[0];
+					m1wx_d = 0;
+					m1wy_d = 0;
+					m1rx_d = 0;
+					m1ry_d = 0;
+					rcnum = 0;
+					theta_c = 0;
+				end
+*/			end	
+/*			BUFFER_5: begin
+				next_state = BUFFER_6;
 			end
-			DATA_OUT: begin
+			BUFFER_6: begin
+				next_state = DATA_OUT;
+			end
+*/			DATA_OUT: begin
 				stopin_d = 0;
 				next_state = DATA_OUT;
 			end
@@ -540,6 +618,9 @@ module perm_blk (
 			m4wd <= 0;
 			m4rx <= 0;
 			m4ry <= 0;
+			roundc <= 0;
+			rcnum <= 0;
+			rc <= 0;
 		end
 		else begin
 			current_state <= #1 next_state;
@@ -571,6 +652,8 @@ module perm_blk (
 			m4wd <= #1 m4wd_d;
 			m4rx <= #1 m4rx_d;
 			m4ry <= #1 m4ry_d;
+			roundc <= #1 roundc_d;
+			rcnum <= #1 rcnum_d;
 		end
 	end
 
