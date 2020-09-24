@@ -39,20 +39,20 @@ module perm_blk (
 	output reg firstout,
 	output reg [63:0] dout);
 	
-	reg stopin_d, pushout_d, firstout_d;
-	reg [63:0] dout_d, m1wd_d, m2wd_d, m3wd_d, m4wd_d;
+	reg [63:0] m1wd_d, m2wd_d, m3wd_d, m4wd_d;
 	reg [2:0] m1rx_d, m1ry_d, m1wx_d, m1wy_d, m1wr_d, m2rx_d, m2ry_d, m2wx_d, m2wy_d, m2wr_d, m3rx_d, m3ry_d, m3wx_d, m3wy_d, m3wr_d, m4rx_d, m4ry_d, m4wx_d, m4wy_d, m4wr_d;
 	reg [4:0][63:0] theta_c = 0;
 	reg [5:0] roundc, roundc_d;
 	reg [2:0] rcnum, rcnum_d;
 	reg [8:0] rc, rc_d;
+	reg in_overflow;
 
 	enum reg [4:0] {
 		IDLE,
 		DATA_IN,
 		THETA_C,
 		BUFFER_1,
-		BUFFER_8,
+		BUFFER_T,
 		THETA_D_RHO_PI,
 		CHI_1,
 		BUFFER_2,
@@ -64,7 +64,8 @@ module perm_blk (
 		BUFFER_6,
 		CLEAN,
 		DATA_OUT,
-		BUFFER_7
+		BUFFER_7,
+		BUFFER_8
 	} current_state, next_state;
 
 /*	m55 in_buffer (clk, rst, m1rx, m1ry, m1rd, m1wx, m1wy, m1wr, m1wd);
@@ -74,10 +75,6 @@ module perm_blk (
 */
 	always @ (*) begin
 		next_state = current_state;
-		stopin_d = stopin;
-		pushout_d = pushout;
-		firstout_d = firstout;
-		dout_d = dout;	
 		m1wx_d = m1wx;
 		m1wy_d = m1wy;
 		m1wr_d = m1wr;
@@ -126,6 +123,10 @@ module perm_blk (
 			end
 			DATA_IN: begin
 				if (pushin) begin
+					if (firstin) begin
+						$display("SET2 %h%t", din, $time);
+						/////////////////
+					end
 					m1wx_d = m1wx + 3'b001;
 					m2wx_d = m2wx + 3'b001;
 					m3wx_d = m3wx + 3'b001;
@@ -143,7 +144,7 @@ module perm_blk (
 							m1wr_d = 0;
 							m2wr_d = 0;
 							m3wr_d = 0;
-							stopin_d = 1; 
+							stopin = 1; 
 							next_state = THETA_C;
 						end
 						else begin
@@ -160,8 +161,8 @@ module perm_blk (
 						end
 					end
 					else begin
-						if (m1wx==3'b010 && m1wy==3'b100)  //STOP INPUT BEFORE 100/100
-							stopin_d = 1;
+//						if (m1wx==3'b010 && m1wy==3'b100)  //STOP INPUT BEFORE 100/100
+//							stopin_d = 1;
 						m1wr_d = 1;
 						m1wd_d = din;
 						m2wr_d = 1;
@@ -196,7 +197,7 @@ module perm_blk (
 						m2wr_d = 0;
 						m2wx_d = 0;
 						m2rx_d = 0;
-						next_state = BUFFER_8;
+						next_state = THETA_D_RHO_PI;
 					end
 				end
 //				$display("vm2wd %h | m2rd %h | m1rd %h%t", m2wd_d, m2rd, m1rd, $time);
@@ -204,7 +205,7 @@ module perm_blk (
 			BUFFER_1: begin
 				next_state = THETA_C;
 			end
-			BUFFER_8: begin
+/*			BUFFER_T: begin
 //////////////////////////////// CHECK OUTPUT FROM THETA_C 
 //				$display("x%b y%b | %h%t", m1rx, m1ry, m1rd, $time);
 //				$display("x%b y%b | %h%t", m2rx, m2ry, m2rd, $time);
@@ -230,7 +231,7 @@ module perm_blk (
 					end
 				end
 			end
-			THETA_D_RHO_PI: begin
+*/			THETA_D_RHO_PI: begin
 /*				$display("theta_c[%b] %h | m2rd %h%t", vm1rx, theta_c[vm1rx], m2rd, $time);
 //				m1rx_d = vm1rx + 1;
 				m2rx_d = vm2rx + 1;
@@ -623,6 +624,7 @@ module perm_blk (
 				m1wr_d = 0;
 				m1wx_d = 0;
 				m1wy_d = 0;
+				firstout = 1;
 				next_state = DATA_OUT;
 			end
 			CLEAN: begin
@@ -644,13 +646,12 @@ module perm_blk (
 //				$display("%b", theta_c);
 			end
 			DATA_OUT: begin
-//				stopin_d = 0;
 //				next_state = DATA_OUT;
 //////////////////////////////// CHECK OUTPUT FROM IOTA 
-				$display("OUTM1 x%b y%b | %h%t", m1rx, m1ry, m1rd, $time);
+//				$display("OUTM1 x%b y%b | %h%t", m1rx, m1ry, m1rd, $time);
 //				$display("OUTM2 x%b y%b | %h%t", m2rx, m2ry, m2rd, $time);
 //				$display("OUTM3 x%b y%b | %h%t\n", m3rx, m3ry, m3rd, $time);
-				m1ry_d = m1ry + 1;
+/*				m1ry_d = m1ry + 1;
 				m2ry_d = m2ry + 1;
 				m3ry_d = m3ry + 1;
 				if (m1ry == 3'b100) begin
@@ -667,13 +668,45 @@ module perm_blk (
 						m2ry_d = 0;
 						m3rx_d = 0;
 						m3ry_d = 0;
-						next_state = BUFFER_7;
+						next_state = BUFFER_8;
 					end
 				end
-			
+*/		
+//				$display("STOP %b", stopout);
+				if (!stopout) begin
+					pushout = 1;
+					if (m1rx==0 && m1ry==0) begin
+						firstout = 1;
+					end
+					else
+						firstout = 0;
+					dout = m1rd;
+					m1rx_d = m1rx + 1;
+					if (m1rx == 3'b100) begin
+						m1rx_d = 0;
+						m1ry_d = m1ry + 1;
+						if (m1ry == 3'b100) begin
+							m1ry_d = 0;
+							next_state = BUFFER_8;
+						end
+					end
+				end
+				else begin
+					pushout = 0;
+				end
+				$display("1st %b OUT %h%t", firstout, dout, $time);
 			end
-			BUFFER_7: begin
-				next_state = BUFFER_7;
+/*			BUFFER_7: begin
+				if (m1rx!=0 || m1ry!=0) begin
+//					$display("1 out %b%t", firstout, $time);
+					firstout = 0;
+				end
+				next_state = DATA_OUT;
+			end
+*/			BUFFER_8: begin
+				stopin = 0;
+				pushout = 0;
+				next_state = IDLE;
 			end
 			default:
 				$display("STATE MACHINE ERROR AT %b %b | %t", current_state, next_state, $time);
@@ -714,13 +747,10 @@ module perm_blk (
 			roundc <= 0;
 			rcnum <= 0;
 			rc <= 0;
+			in_overflow <= 0;
 		end
 		else begin
 			current_state <= #1 next_state;
-			stopin <= #1 stopin_d;
-			pushout <= #1 pushout_d;
-			firstout <= #1 firstout_d;
-			dout <= #1 dout_d;
 			m1wx <= #1 m1wx_d;
 			m1wy <= #1 m1wy_d;
 			m1wr <= #1 m1wr_d;
