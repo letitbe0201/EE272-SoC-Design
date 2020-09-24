@@ -46,6 +46,7 @@ module perm_blk (
 	reg [2:0] rcnum, rcnum_d;
 	reg [8:0] rc, rc_d;
 	reg in_overflow;
+	reg f_set;
 
 	enum reg [4:0] {
 		IDLE,
@@ -65,7 +66,9 @@ module perm_blk (
 		CLEAN,
 		DATA_OUT,
 		BUFFER_7,
-		BUFFER_8
+		BUFFER_8,
+		OVERFLOW,
+		BUFFER_9
 	} current_state, next_state;
 
 /*	m55 in_buffer (clk, rst, m1rx, m1ry, m1rd, m1wx, m1wy, m1wr, m1wd);
@@ -105,6 +108,8 @@ module perm_blk (
 //		$display("---x:%b y:%b DATA:%h STOP:%b 1st:%b DIN:%h%t", m1wx, m1wy, m1wd, stopin, firstin, din, $time);
 		case (current_state)
 			IDLE: begin
+				in_overflow = 0;
+				f_set = 1;
 				if (pushin && firstin) begin
 					m1wx_d = 3'b000;
 					m1wy_d = 3'b000;
@@ -116,25 +121,19 @@ module perm_blk (
 					m3wd_d = 0; // CLEANING DATA IN M3
 					next_state = DATA_IN;
 				end
-				else begin
-					next_state = IDLE;
-				end
-//				$display("%b %h %h %b %b", firstin, din, m2wd, m2wx, m2wy);
+//				$display("%b %h%t", firstin, din, $time);
 			end
 			DATA_IN: begin
+//				$display("---pushin:%b m1x:%b m1y:%b D:%h", pushin, m1wx, m1wy, m1wd);
+				in_overflow = 0;
 				if (pushin) begin
 					if (firstin) begin
-						$display("SET2 %h%t", din, $time);
-						/////////////////
-					end
-					m1wx_d = m1wx + 3'b001;
-					m2wx_d = m2wx + 3'b001;
-					m3wx_d = m3wx + 3'b001;
-					if (m1wx == 3'b100) begin
-						m1wy_d = m1wy + 3'b001;
-						m2wy_d = m2wy + 3'b001;
-						m3wy_d = m3wy + 3'b001;
-						if (m1wy == 3'b100) begin
+//						$display("SET2 %h%t", din, $time);
+//						$display("1x %b 1y %b", m1wx, m1wy);
+						m4wr_d = 1;
+						m4wd_d = din;
+						in_overflow = 1;
+//						$display("OVERFLOW %h x%b y%b%t\n", din, m4wx_d, m4wy_d, $time);
 							m1wx_d = 0;
 							m1wy_d = 0;
 							m2wx_d = 0;
@@ -145,41 +144,78 @@ module perm_blk (
 							m2wr_d = 0;
 							m3wr_d = 0;
 							stopin = 1; 
+//							$display("din %h THETAC %t", din, $time);
 							next_state = THETA_C;
-						end
-						else begin
-							m1wx_d = 3'b000;
-							m1wr_d = 1;
-							m1wd_d = din;
-							m2wx_d = 3'b000;
-							m2wr_d = 1;
-							m2wd_d = 64'b0;
-							m3wx_d = 3'b000;
-							m3wr_d = 1;
-							m3wd_d = 64'b0;
-//							$display("%b %h %h %b %b", firstin, din, m2wd, m2wx, m2wy);
-						end
 					end
 					else begin
-//						if (m1wx==3'b010 && m1wy==3'b100)  //STOP INPUT BEFORE 100/100
-//							stopin_d = 1;
-						m1wr_d = 1;
-						m1wd_d = din;
-						m2wr_d = 1;
-						m2wd_d = 64'b0;
-//						$display("%b %h %h %b %b", firstin, din, m2rd, m2wd, m2wy);
+						m1wx_d = m1wx + 3'b001;
+						m2wx_d = m2wx + 3'b001;
+						m3wx_d = m3wx + 3'b001;
+						if (m1wx == 3'b100) begin
+							m1wy_d = m1wy + 3'b001;
+							m2wy_d = m2wy + 3'b001;
+							m3wy_d = m3wy + 3'b001;
+							if (m1wy == 3'b100) begin
+								m1wx_d = 0;
+								m1wy_d = 0;
+								m2wx_d = 0;
+								m2wy_d = 0;
+								m3wx_d = 0;
+								m3wy_d = 0;
+								m1wr_d = 0;
+								m2wr_d = 0;
+								m3wr_d = 0;
+								stopin = 1; 
+								next_state = THETA_C;
+							end
+							else begin
+								m1wx_d = 3'b000;
+								m1wr_d = 1;
+								m1wd_d = din;
+								m2wx_d = 3'b000;
+								m2wr_d = 1;
+								m2wd_d = 64'b0;
+								m3wx_d = 3'b000;
+								m3wr_d = 1;
+								m3wd_d = 64'b0;
+//								$display("%b %h %h %b %b", firstin, din, m2wd, m2wx, m2wy);
+							end
+						end
+						else begin
+//							if (m1wx==3'b010 && m1wy==3'b100)  //STOP INPUT BEFORE 100/100
+//								stopin_d = 1;
+							m1wr_d = 1;
+							m1wd_d = din;
+							m2wr_d = 1;
+							m2wd_d = 64'b0;
+							m3wr_d = 1;
+							m3wd_d = 64'b0;
+//							$display("%b %h %h %b %b", firstin, din, m2rd, m2wd, m2wy);
+						end
 					end
+//					$display("x:%b y:%b m1:%h%t", m1wx, m1wy, m1wd, $time);
 				end
-//				$display("%b %b %h", m2wx, m2wy, m2wd);
+				else begin
+					m2rx_d = 0;
+					m2ry_d = 0;
+					m2wx_d = 0;
+					m2wy_d = 0;
+					m2wr_d = 1;
+					next_state = THETA_C;
+				end
+//				$display("M1 %b %b %h", m1wx, m1wy, m1wd);
 			end
 			THETA_C: begin
 //				$display("M1 x%b y%b | %b%t", m1rx, m1ry, m1rd, $time);
 //				$display("M2 x%b y%b | %b%t", m2rx, m2ry, m2rd, $time);
-//				$display("TH[%b] %h\n", m1rx, theta_c[m1rx]);
+//				if (roundc == 0)
+//					$display("round:%d x:%b y:%b m1rd:%h | 2x:%b 2y:%b m2rd:%h 2wr:%b| TH[%b]:%h%t", roundc, m1rx, m1ry, m1rd, m2rx, m2ry, m2rd, m2wr, m1rx, theta_c[m1rx], $time);
 //////////////////////////////// CHECK THETA_C				
 //				$display("theta[%b] %h | vm2wd %h | x%b y%b m2rd %h | m1rd %h%t", m1rx, theta_c[m1rx], m2wd_d, m2rx, m2ry, m2rd, m1rd, $time);
-				if ((m1ry!=3'b100 && roundc==0) || roundc!=0)
+				m4wr_d = 0;
+				if ((m1ry!=3'b100 && roundc==0) || (roundc!=0) || (f_set==0)) begin
 					theta_c[m1rx] = m2rd ^ m1rd;
+				end
 				m2wr_d = 1;
 				m2wd_d = theta_c[m1rx];
 				next_state = BUFFER_1;
@@ -200,7 +236,8 @@ module perm_blk (
 						next_state = THETA_D_RHO_PI;
 					end
 				end
-//				$display("vm2wd %h | m2rd %h | m1rd %h%t", m2wd_d, m2rd, m1rd, $time);
+//				$display("1x:%b 1y:%b | m2wd_d %h | m2rd %h | m1rd %h%t", m1rx, m1ry, m2wd_d, m2rd, m1rd, $time);
+//				$display("theta_c[%b]:%h%t", m1rx, theta_c[m1rx], $time);
 			end
 			BUFFER_1: begin
 				next_state = THETA_C;
@@ -694,6 +731,7 @@ module perm_blk (
 				else begin
 					pushout = 0;
 				end
+/////////////////////////////// OUTPUT				
 				$display("1st %b OUT %h%t", firstout, dout, $time);
 			end
 /*			BUFFER_7: begin
@@ -704,11 +742,42 @@ module perm_blk (
 				next_state = DATA_OUT;
 			end
 */			BUFFER_8: begin
-				stopin = 0;
 				pushout = 0;
-				next_state = IDLE;
+				next_state = OVERFLOW;
 			end
-			default:
+			OVERFLOW: begin
+				if (in_overflow) begin
+//					$display("M4 %h%t", m4rd, $time);
+					m1wx_d = 3'b000;
+					m1wy_d = 3'b000;
+					m1wr_d = 1;
+					m1wd_d = m4rd; // WRITE DATA TO INPUT BUFFER
+					m2wr_d = 1;
+					m2wd_d = 0; // CLEANING DATA IN M2
+					m3wr_d = 1;
+					m3wd_d = 0; // CLEANING DATA IN M3
+//				m1wx_d = m1wx + 3'b001;
+//				m2wx_d = m2wx + 3'b001;
+//				m3wx_d = m3wx + 3'b001;
+					stopin = 0;
+					f_set = 0;
+					next_state = DATA_IN;
+				end
+				else begin
+					next_state = IDLE;
+				end
+			end
+/*			BUFFER_9: begin
+				m1wx_d = m1wx + 3'b001;
+				m2wx_d = m2wx + 3'b001;
+				m3wx_d = m3wx + 3'b001;
+				m1wd_d = din;
+				m2wr_d = 0;
+				m3wd_d = 0;
+				stopin = 0;
+				next_state = DATA_IN;
+			end
+*/			default:
 				$display("STATE MACHINE ERROR AT %b %b | %t", current_state, next_state, $time);
 		endcase
 	end
@@ -748,6 +817,7 @@ module perm_blk (
 			rcnum <= 0;
 			rc <= 0;
 			in_overflow <= 0;
+			f_set <= 0;
 		end
 		else begin
 			current_state <= #1 next_state;
