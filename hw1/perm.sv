@@ -45,8 +45,8 @@ module perm_blk (
 	reg [5:0] roundc, roundc_d;
 	reg [2:0] rcnum, rcnum_d;
 	reg [8:0] rc, rc_d;
-	reg in_overflow;
-	reg f_set;
+	reg in_overflow, in_overflow_d;
+	reg f_set, f_set_d;
 
 	enum reg [4:0] {
 		IDLE,
@@ -78,6 +78,10 @@ module perm_blk (
 */
 	always @ (*) begin
 		next_state = current_state;
+		dout = 64'b0;
+		stopin = 1;
+		pushout = 0;
+		firstout = 0;
 		m1wx_d = m1wx;
 		m1wy_d = m1wy;
 		m1wr_d = m1wr;
@@ -105,12 +109,15 @@ module perm_blk (
 		roundc_d = roundc;
 		rcnum_d = rcnum;
 		rc_d = rc;
+		in_overflow_d = in_overflow;
+		f_set_d = f_set;
 //		$display("---x:%b y:%b DATA:%h STOP:%b 1st:%b DIN:%h%t", m1wx, m1wy, m1wd, stopin, firstin, din, $time);
 		case (current_state)
 			IDLE: begin
-				in_overflow = 0;
-				f_set = 1;
+				in_overflow_d = 0;
+				f_set_d = 1;
 				if (pushin && firstin) begin
+					stopin = 0;
 					m1wx_d = 3'b000;
 					m1wy_d = 3'b000;
 					m1wr_d = 1;
@@ -125,14 +132,15 @@ module perm_blk (
 			end
 			DATA_IN: begin
 //				$display("---pushin:%b m1x:%b m1y:%b D:%h", pushin, m1wx, m1wy, m1wd);
-				in_overflow = 0;
+				in_overflow_d = 0;
 				if (pushin) begin
+					stopin = 0;
 					if (firstin) begin
 //						$display("SET2 %h%t", din, $time);
 //						$display("1x %b 1y %b", m1wx, m1wy);
 						m4wr_d = 1;
 						m4wd_d = din;
-						in_overflow = 1;
+						in_overflow_d = 1;
 //						$display("OVERFLOW %h x%b y%b%t\n", din, m4wx_d, m4wy_d, $time);
 							m1wx_d = 0;
 							m1wy_d = 0;
@@ -183,7 +191,7 @@ module perm_blk (
 						end
 						else begin
 //							if (m1wx==3'b010 && m1wy==3'b100)  //STOP INPUT BEFORE 100/100
-//								stopin_d = 1;
+//								stopin = 1;
 							m1wr_d = 1;
 							m1wd_d = din;
 							m2wr_d = 1;
@@ -663,6 +671,7 @@ module perm_blk (
 				m1wy_d = 0;
 				firstout = 1;
 				next_state = DATA_OUT;
+//				$display("1st %b OUT %h%t", firstout, dout, $time);
 			end
 			CLEAN: begin
 				m2wd_d = 0;
@@ -734,14 +743,14 @@ module perm_blk (
 /////////////////////////////// OUTPUT				
 				$display("1st %b OUT %h%t", firstout, dout, $time);
 			end
-/*			BUFFER_7: begin
-				if (m1rx!=0 || m1ry!=0) begin
+//			BUFFER_7: begin
+//				if (m1rx!=0 || m1ry!=0) begin
 //					$display("1 out %b%t", firstout, $time);
-					firstout = 0;
-				end
-				next_state = DATA_OUT;
-			end
-*/			BUFFER_8: begin
+//					firstout = 0;
+//				end
+//				next_state = DATA_OUT;
+//			end
+			BUFFER_8: begin
 				pushout = 0;
 				next_state = OVERFLOW;
 			end
@@ -760,7 +769,7 @@ module perm_blk (
 //				m2wx_d = m2wx + 3'b001;
 //				m3wx_d = m3wx + 3'b001;
 					stopin = 0;
-					f_set = 0;
+					f_set_d = 0;
 					next_state = DATA_IN;
 				end
 				else begin
@@ -785,10 +794,10 @@ module perm_blk (
 	always @ (posedge clk or posedge rst) begin
 		if (rst) begin
 			current_state <= IDLE;
-			stopin <= 0;
+			stopin <= 1;
 			pushout <= 64'b0;
 			firstout <= 0;
-			dout <= 0;
+			dout <= 64'b0;
 			m1wx <= 0;
 			m1wy <= 0;
 			m1wr <= 0;
@@ -848,6 +857,8 @@ module perm_blk (
 			roundc <= #1 roundc_d;
 			rcnum <= #1 rcnum_d;
 			rc <= #1 rc_d;
+			in_overflow <= #1 in_overflow_d;
+			f_set <= #1 f_set_d;
 		end
 	end
 
