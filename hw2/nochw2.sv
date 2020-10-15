@@ -58,14 +58,15 @@ module noc_intf (
 	union packed {
 		reg [199:0][7:0] Dev; // Interface data
 		reg [24:0][63:0] Per; // To/from Perm block
-	} data_pkg, data_pkg_d;
-	reg [7:0] data_index, data_index_d;
+	} data_noc, data_noc_d, data_perm, data_perm_d;
+	reg [7:0] data_noc_index, data_noc_index_d, data_perm_index, data_perm_index_d;
 	reg data_full, data_full_d; // Indicate a full set of 200 byte data
 
 	// Perm Control
 	reg write_perm, write_perm_d;
 	reg read_perm, read_perm_d;
 	reg [4:0] perm_index, perm_index_d;
+	reg perm_busy, perm_busy_d; // Indicate busy state (data in perm) of the perm block
 
 	//Control Signal for Read/Write Command
 	reg [1:0] get_r_w, get_r_w_d; // Get message 0:nothing 1:read 2:write
@@ -111,12 +112,15 @@ module noc_intf (
 		Src_ID_d = Src_ID;
 		Addr_d = Addr;
 		Addr_index_d = Addr_index;
-		data_pkg_d = data_pkg;
-		data_index_d = data_index;
+		data_noc_d = data_noc;
+		data_perm_d = data_perm;
+		data_noc_index_d = data_noc_index;
+		data_perm_index_d = data_perm_index;
 		data_full_d = data_full;
 		write_perm_d = write_perm;
 		read_perm_d = read_perm;
 		perm_index_d = perm_index;
+		perm_busy_d = perm_busy;
 		get_r_w_d = get_r_w;
 		send_msg_d = send_msg;
 		rc_d = rc;
@@ -127,19 +131,17 @@ module noc_intf (
 			IDLE_R: begin
 				Alen_cnt_d = 0;
 				Dlen_cnt_d = 0;
-//				Dest_ID_d = 0;
-//				Src_ID_d = 0;
 				data_full_d = 0;
 				if (noc_to_dev_ctl) begin
 					case (noc_to_dev_data[2:0])
 						3'b001: begin // GET READ
-							$display("REEEEEEEEEEEEEEEEEEEAD COMMAND GET!");
+							$display("\nREEEEEEEEEEEEEEEEEEEAD COMMAND GET!\n");
 							get_r_w_d = 1;
 							AD_assignment();
 							next_state_r = DEST_R;
 						end
 						3'b010: begin // GET WRITE
-							$display("WRIIIIIIIIIIIIIIIIIITE COMMAND GET!");
+							$display("\nWRIIIIIIIIIIIIIIIIIITE COMMAND GET!\n");
 							get_r_w_d = 2;
 							AD_assignment();
 							next_state_r = DEST_R;
@@ -152,12 +154,12 @@ module noc_intf (
 			end
 			WRITE: begin
 				if (~data_full) begin
-					data_pkg_d.Dev[data_index] = noc_to_dev_data;
-					data_index_d = data_index + 1;
+					data_noc_d.Dev[data_noc_index] = noc_to_dev_data;
+					data_noc_index_d = data_noc_index + 1;
 					Actual_data_d = Actual_data + 1; // Count the actual data length
 				end
-				if (data_index == 199) begin
-					data_index_d = 0;
+				if (data_noc_index == 199) begin
+					data_noc_index_d = 0;
 					data_full_d = 1;
 					write_perm_d = 1;
 					Actual_data_d = Actual_data + 1;
@@ -173,7 +175,7 @@ module noc_intf (
 					send_msg_d = 3; // Write Response
 					next_state_r = IDLE_R;
 				end
-				$display("write_perm:%b  WRITEDATA[%d] = %b%t", write_perm, data_index, data_pkg_d.Dev[data_index], $time);
+				$display("write_perm:%b  WRITEDATA[%d] = %b%t", write_perm, data_noc_index, data_noc_d.Dev[data_noc_index], $time);
 			end
 			MSG_R: begin
 				$display("MSG STATE%t", $time);
@@ -214,6 +216,8 @@ module noc_intf (
 					Addr_index_d = 0;
 					Alen_cnt_d = 0;
 					if (get_r_w == 1) begin
+						$display("\nREEEEEEEAAAAD REQUEST Complete.\n");
+						send_msg_d = 2;
 						read_perm_d = 1; // Signal the perm controller to read perm
 						next_state_r = IDLE_R;
 					end
@@ -232,34 +236,37 @@ module noc_intf (
 	// State Machine for SENDING DATA
 	always @ (posedge clk) begin
 		next_state_s = current_state_s;
-//		noc_from_dev_ctl_d = noc_from_dev_ctl;
-//		noc_from_dev_data_d = noc_from_dev_data;
-//		send_msg_d = send_msg;
 		if (send_msg) begin
 			//////// Routing responses
 //			$display("-----------send msg %b %b", send_msg, current_state_s);
 			case (current_state_s)
 				IDLE_S: begin
 					case (send_msg)
-						1: begin
+						1: begin // Message
 							noc_from_dev_ctl_d = 1;
 							noc_from_dev_data_d = 8'b00000101;
 							next_state_s = DEST_S;
 							$display("MSG ALDL %b%t", noc_from_dev_data_d, $time);
 						end
-						2: begin
+						2: begin // Read Response
 						end
-						3: begin
+						3: begin // Write Response
 							noc_from_dev_ctl_d = 1;
 							noc_from_dev_data_d = {rc, 6'b000100};
 							next_state_s = DEST_S;
 							$display("WR RSP RC %b%t", noc_from_dev_data_d, $time);
 						end
-						5: begin
+						4: begin // Pushout Message
 							noc_from_dev_ctl_d = 1;
 							noc_from_dev_data_d = 8'b00000101;
 							next_state_s = DEST_S;
-							$display("EEEEEEEEEEEEEEERRRRRRRRRRRRRR");
+							$display("MSG ALDL %b%t", noc_from_dev_data_d, $time);
+						end
+						5: begin // Stopin Message
+							noc_from_dev_ctl_d = 1;
+							noc_from_dev_data_d = 8'b00000101;
+							next_state_s = DEST_S;
+//							$display("\nSTOPIN 1 -> 0\n");
 						end
 					endcase
 				end
@@ -285,10 +292,15 @@ module noc_intf (
 				end
 				SRC_S: begin
 					noc_from_dev_data_d = Dest_ID;  /////////////////////
-					$display("\n SM %d", send_msg);
+//					$display("\n Send Message %d\n", send_msg);
 					if (send_msg == 1) begin
 						Msg_addr_d = 8'h42;
 						Resp_data_d = 8'h78;
+						next_state_s = MSGADDR;
+					end
+					else if (send_msg == 4) begin
+						Msg_addr_d = 8'h17;
+						Resp_data_d = 8'h12;
 						next_state_s = MSGADDR;
 					end
 					else if (send_msg==3 || send_msg==5) begin
@@ -316,43 +328,53 @@ module noc_intf (
 	// PUSHOUT AND STOPIN FROM PERM
 	always @ (posedge pushout) begin
 		send_msg_d = 4;
+		$display("\nPUUUUUUUUUUUUUSHOUTTTTTTT 0->1 from perm\n");
 	end
 	always @ (negedge stopin) begin
 		send_msg_d = 5;
+		$display("\nSTOPIN 1 -> 0\n");
 	end
 
 	// PERM CONTROL
 	always @ (posedge clk) begin
 		if (write_perm) begin
-			firstin_d = (perm_index==0) ? 1 : 0;
-			pushin_d = 1;
-			din_d = data_pkg.Per[perm_index];
-			//////// WRITE TO PERM
-//			$display("stopin%b first%b push%b data[%d] = %h%t", stopin, firstin_d, pushin_d, perm_index, din_d, $time);
-			perm_index_d = perm_index + 1;
-			if (perm_index == 24) begin
-				write_perm_d = 0;
-				pushin_d = 0;
-				din_d = 0;
-				perm_index_d = 0;
-			end
-		end
-		if (read_perm) begin
-			stopout_d = 0;
-			if (firstout) begin
-				data_pkg_d.Per[data_index] = dout;
-				data_index_d = data_index + 1;
-			end
-			else begin
-				data_pkg_d.Per[data_index] = dout;
-				data_index_d = data_index + 1;
-				if (data_index == 24) begin // PERM READ COMPLETE
-					read_perm_d = 0;
-					stopout_d = 1;
-					data_index_d = 0;
+			if (~perm_busy) begin
+				stopout_d = 0;
+				firstin_d = (perm_index==0) ? 1 : 0;
+				pushin_d = 1;
+				din_d = data_noc.Per[perm_index];
+				//////// WRITE TO PERM
+				$display("WRITE TO PERM stopin%b first%b pushin%b pushout%b data[%d] = %h%t", stopin, firstin_d, pushin_d, pushout, perm_index, din_d, $time);
+				perm_index_d = perm_index + 1;
+				if (perm_index == 24) begin
+					write_perm_d = 0;
+					pushin_d = 0;
+					din_d = 0;
+					perm_index_d = 0;
+					perm_busy_d = 1; // Input to perm COMPLETE, then process the permutation
 				end
 			end
 		end
+//		if (read_perm) begin
+//			stopout_d = 0;
+			if (firstout && pushout) begin
+				$display("\nFIIIIIIIIIIIIIIRSTTTTTTTTTTTTTTTTTOUTTTTTTTTTTTTTT\n");
+				data_perm_d.Per[data_perm_index] = dout;
+				$display("firstout%b pushout%b READ FROM PERM [%d]: %h%t", firstout, pushout, data_perm_index, dout, $time);
+				data_perm_index_d = data_perm_index + 1;
+			end
+			else if (pushout) begin
+				data_perm_d.Per[data_perm_index] = dout;
+				$display("firstout%b pushout%b READ FROM PERM [%d]: %h%t", firstout, pushout, data_perm_index, dout, $time);
+				data_perm_index_d = data_perm_index + 1;
+				if (data_perm_index == 24) begin // PERM READ COMPLETE
+					read_perm_d = 0;
+					stopout_d = 1;
+					data_perm_index_d = 0;
+					perm_busy_d = 0;
+				end
+			end
+//		end
 	end
 
 
@@ -376,12 +398,15 @@ int i = 41;
 			Src_ID <= 0;
 			Addr <= 0;
 			Addr_index <= 0;
-			data_pkg <= 0;
-			data_index <= 0;
+			data_noc <= 0;
+			data_perm <= 0;
+			data_noc_index <= 0;
+			data_perm_index <= 0;
 			data_full <= 0;
 			write_perm <= 0;
 			read_perm <= 0;
 			perm_index <= 0;
+			perm_busy <= 0;
 			get_r_w <= 0;
 			send_msg <= 0;
 			rc <= 0;
@@ -404,12 +429,15 @@ int i = 41;
 			Src_ID <= Src_ID_d;
 			Addr <= Addr_d;
 			Addr_index <= Addr_index_d;
-			data_pkg <= data_pkg_d;
-			data_index <= data_index_d;
+			data_noc <= data_noc_d;
+			data_perm <= data_perm_d;
+			data_noc_index <= data_noc_index_d;
+			data_perm_index <= data_perm_index_d;
 			data_full <= data_full_d;
 			write_perm <= write_perm_d;
 			read_perm <= read_perm_d;
 			perm_index <= perm_index_d;
+			perm_busy <= perm_busy_d;
 			get_r_w <= get_r_w_d;
 			send_msg <= send_msg_d;
 			rc <= rc_d;
