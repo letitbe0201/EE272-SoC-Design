@@ -136,13 +136,13 @@ module noc_intf (
 				if (noc_to_dev_ctl) begin
 					case (noc_to_dev_data[2:0])
 						3'b001: begin // GET READ
-							$display("\nREEEEEEEEEEEEEEEEEEEAD COMMAND GET!\n");
+							$display("\nREEEEEEEEEEEEEEEEEEEAD COMMAND GET!%t\n", $time);
 							get_r_w_d = 1;
 							AD_assignment();
 							next_state_r = DEST_R;
 						end
 						3'b010: begin // GET WRITE
-							$display("\nWRIIIIIIIIIIIIIIIIIITE COMMAND GET!\n");
+							$display("\nWRIIIIIIIIIIIIIIIIIITE COMMAND GET!%t\n", $time);
 							get_r_w_d = 2;
 							AD_assignment();
 							next_state_r = DEST_R;
@@ -283,7 +283,7 @@ module noc_intf (
 					noc_from_dev_ctl_d = 0;
 					if (Dlen_cnt) begin
 						noc_from_dev_data_d = data_perm.Dev[data_out_index]; 
-						$display("RD RSP to NOC[%d] = %h%t", data_out_index, noc_from_dev_data_d, $time);
+						$display("%d %s RD RSP to NOC[%d] = %h%t", send_msg, next_state_s, data_out_index, noc_from_dev_data_d, $time);
 						Dlen_cnt_d = Dlen_cnt - 1;
 						if (data_out_index != 199) begin
 							data_out_index_d = data_out_index + 1;
@@ -291,11 +291,20 @@ module noc_intf (
 						else begin
 							data_out_index_d = 0;
 						end
+//						if (send_msg == 5) begin
+//							send_msg_d = 1;
+//							next_state_s = IDLE_S;
+//						end
 					end
 					else begin
 						noc_from_dev_ctl_d = 1;
 						noc_from_dev_data_d = 0;
-						send_msg_d = 0;
+//						if (send_msg == 5) begin
+//							send_msg_d = 1;
+//						end
+//						else begin
+						       	send_msg_d = 0;
+//						end
 						next_state_s = IDLE_S;
 					end
 				end
