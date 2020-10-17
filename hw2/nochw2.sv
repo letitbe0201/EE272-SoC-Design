@@ -60,7 +60,7 @@ module noc_intf (
 		reg [199:0][7:0] Dev; // Interface data
 		reg [24:0][63:0] Per; // To/from Perm block
 	} data_noc, data_noc_d, data_perm, data_perm_d;
-	reg [7:0] data_noc_index, data_noc_index_d, data_perm_index, data_perm_index_d;
+	reg [7:0] data_in_index, data_in_index_d, data_out_index, data_out_index_d; // IN/OUT to the Interface
 	reg data_full, data_full_d; // Indicate a full set of 200 byte data
 
 	// Perm Control
@@ -115,8 +115,8 @@ module noc_intf (
 		Addr_index_d = Addr_index;
 		data_noc_d = data_noc;
 		data_perm_d = data_perm;
-		data_noc_index_d = data_noc_index;
-		data_perm_index_d = data_perm_index;
+		data_in_index_d = data_in_index;
+		data_out_index_d = data_out_index;
 		data_full_d = data_full;
 		write_perm_d = write_perm;
 		read_perm_d = read_perm;
@@ -155,12 +155,12 @@ module noc_intf (
 			end
 			WRITE: begin
 				if (~data_full) begin
-					data_noc_d.Dev[data_noc_index] = noc_to_dev_data;
-					data_noc_index_d = data_noc_index + 1;
+					data_noc_d.Dev[data_in_index] = noc_to_dev_data;
+					data_in_index_d = data_in_index + 1;
 					Actual_data_d = Actual_data + 1; // Count the actual data length
 				end
-				if (data_noc_index == 199) begin
-					data_noc_index_d = 0;
+				if (data_in_index == 199) begin
+					data_in_index_d = 0;
 					data_full_d = 1;
 					write_perm_d = 1;
 					Actual_data_d = Actual_data + 1;
@@ -176,7 +176,7 @@ module noc_intf (
 					send_msg_d = 3; // Write Response
 					next_state_r = IDLE_R;
 				end
-				$display("write_perm:%b  WRITEDATA[%d] = %b%t", write_perm, data_noc_index, data_noc_d.Dev[data_noc_index], $time);
+				$display("write_perm:%b  WRITEDATA[%d] = %b%t", write_perm, data_in_index, data_noc_d.Dev[data_in_index], $time);
 			end
 			MSG_R: begin
 				$display("MSG STATE%t", $time);
@@ -252,7 +252,7 @@ module noc_intf (
 							$display("MSG ALDL %b%t", noc_from_dev_data_d, $time);
 						end
 						2: begin // Read Response
-							if (data_perm_index+Dlen_cnt > 200) begin // Partial if the data index exceeds 200
+							if (data_out_index+Dlen_cnt > 200) begin // Partial if the data index exceeds 200
 								rc_d = 2'b10;
 							end	
 							else begin
@@ -282,17 +282,20 @@ module noc_intf (
 				READ_RESP: begin
 					noc_from_dev_ctl_d = 0;
 					if (Dlen_cnt) begin
-						noc_from_dev_data_d = data_perm.Dev[data_perm_index]; 
-						$display("RD RSP to NOC[%d] = %h%t", data_perm_index, noc_from_dev_data_d, $time);
+						noc_from_dev_data_d = data_perm.Dev[data_out_index]; 
+						$display("RD RSP to NOC[%d] = %h%t", data_out_index, noc_from_dev_data_d, $time);
 						Dlen_cnt_d = Dlen_cnt - 1;
-						if (data_perm_index != 199) begin
-							data_perm_index_d = data_perm_index + 1;
+						if (data_out_index != 199) begin
+							data_out_index_d = data_out_index + 1;
 						end
 						else begin
-							data_perm_index_d = 0;
+							data_out_index_d = 0;
 						end
 					end
 					else begin
+						noc_from_dev_ctl_d = 1;
+						noc_from_dev_data_d = 0;
+						send_msg_d = 0;
 						next_state_s = IDLE_S;
 					end
 				end
@@ -404,18 +407,18 @@ module noc_intf (
 //			stopout_d = 0;
 			if (firstout && pushout) begin
 				$display("\nFIIIIIIIIIIIIIIRSTTTTTTTTTTTTTTTTTOUTTTTTTTTTTTTTT\n");
-				data_perm_d.Per[data_perm_index] = dout;
-				$display("READ FROM PERM firstout%b pushout%b [%d]: %h%t", firstout, pushout, data_perm_index, dout, $time);
-				data_perm_index_d = data_perm_index + 1;
+				data_perm_d.Per[data_in_index] = dout;
+				$display("READ FROM PERM firstout%b pushout%b [%d]: %h%t", firstout, pushout, data_in_index, dout, $time);
+				data_in_index_d = data_in_index + 1;
 			end
 			else if (pushout) begin
-				data_perm_d.Per[data_perm_index] = dout;
-				$display("READ FROM PERM firstout%b pushout%b [%d]: %h%t", firstout, pushout, data_perm_index, dout, $time);
-				data_perm_index_d = data_perm_index + 1;
-				if (data_perm_index == 24) begin // PERM READ COMPLETE
+				data_perm_d.Per[data_in_index] = dout;
+				$display("READ FROM PERM firstout%b pushout%b [%d]: %h%t", firstout, pushout, data_in_index, dout, $time);
+				data_in_index_d = data_in_index + 1;
+				if (data_in_index == 24) begin // PERM READ COMPLETE
 					read_perm_d = 0;
 					stopout_d = 1;
-					data_perm_index_d = 0;
+					data_in_index_d = 0;
 					perm_busy_d = 0;
 				end
 			end
@@ -445,8 +448,8 @@ int i = 41;
 			Addr_index <= 0;
 			data_noc <= 0;
 			data_perm <= 0;
-			data_noc_index <= 0;
-			data_perm_index <= 0;
+			data_in_index <= 0;
+			data_out_index <= 0;
 			data_full <= 0;
 			write_perm <= 0;
 			read_perm <= 0;
@@ -478,8 +481,8 @@ int i = 41;
 			Addr_index <= Addr_index_d;
 			data_noc <= data_noc_d;
 			data_perm <= data_perm_d;
-			data_noc_index <= data_noc_index_d;
-			data_perm_index <= data_perm_index_d;
+			data_in_index <= data_in_index_d;
+			data_out_index <= data_out_index_d;
 			data_full <= data_full_d;
 			write_perm <= write_perm_d;
 			read_perm <= read_perm_d;
