@@ -176,6 +176,7 @@ module noc_intf (
 					send_msg_d = 3; // Write Response
 					next_state_r = IDLE_R;
 				end
+				///////// DATA WRITE FROM NOC
 				$display("write_perm:%b  WRITEDATA[%d] = %b%t", write_perm, data_in_index, data_noc_d.Dev[data_in_index], $time);
 			end
 			MSG_R: begin
@@ -283,7 +284,8 @@ module noc_intf (
 					noc_from_dev_ctl_d = 0;
 					if (Dlen_cnt) begin
 						noc_from_dev_data_d = data_perm.Dev[data_out_index]; 
-						$display("%d %s RD RSP to NOC[%d] = %h%t", send_msg, next_state_s, data_out_index, noc_from_dev_data_d, $time);
+						///////// DATA READ RESPONSE TO NOC
+						$display("RD RSP to NOC[%d] = %h%t", data_out_index, noc_from_dev_data_d, $time);
 						Dlen_cnt_d = Dlen_cnt - 1;
 						if (data_out_index != 199) begin
 							data_out_index_d = data_out_index + 1;
@@ -403,8 +405,8 @@ module noc_intf (
 				firstin_d = (perm_index==0) ? 1 : 0;
 				pushin_d = 1;
 				din_d = data_noc.Per[perm_index];
-				//////// WRITE TO PERM
-				$display("sendmsg%d WRITE TO PERM stopin%b first%b pushin%b pushout%b data[%d] = %h%t", send_msg, stopin, firstin_d, pushin_d, pushout, perm_index, din_d, $time);
+				///////// WRITE TO PERM
+				$display("WRITE TO PERM stopin%b first%b pushin%b pushout%b data[%d] = %h%t", stopin, firstin_d, pushin_d, pushout, perm_index, din_d, $time);
 				perm_index_d = perm_index + 1;
 				if (perm_index == 25) begin
 					write_perm_d = 0;
@@ -420,11 +422,13 @@ module noc_intf (
 			if (firstout && pushout) begin
 				$display("\nFIIIIIIIIIIIIIIRSTTTTTTTTTTTTTTTTTOUTTTTTTTTTTTTTT\n");
 				data_perm_d.Per[data_in_index] = dout;
+				///////// READ FROM PERM
 				$display("READ FROM PERM firstout%b pushout%b [%d]: %h%t", firstout, pushout, data_in_index, dout, $time);
 				data_in_index_d = data_in_index + 1;
 			end
 			else if (pushout) begin
 				data_perm_d.Per[data_in_index] = dout;
+				///////// READ FROM PERM
 				$display("READ FROM PERM firstout%b pushout%b [%d]: %h%t", firstout, pushout, data_in_index, dout, $time);
 				data_in_index_d = data_in_index + 1;
 				if (data_in_index == 24) begin // PERM READ COMPLETE
